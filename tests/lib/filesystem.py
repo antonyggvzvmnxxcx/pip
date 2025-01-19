@@ -1,37 +1,12 @@
 """Helpers for filesystem-dependent tests.
 """
+
 import os
-import socket
-import subprocess
-import sys
+from contextlib import contextmanager
 from functools import partial
 from itertools import chain
-from typing import Iterator, List, Set
-
-from .path import Path
-
-
-def make_socket_file(path: str) -> None:
-    # Socket paths are limited to 108 characters (sometimes less) so we
-    # chdir before creating it and use a relative path name.
-    cwd = os.getcwd()
-    os.chdir(os.path.dirname(path))
-    try:
-        sock = socket.socket(socket.AF_UNIX)
-        sock.bind(os.path.basename(path))
-    finally:
-        os.chdir(cwd)
-
-
-def make_unreadable_file(path: str) -> None:
-    Path(path).touch()
-    os.chmod(path, 0o000)
-    if sys.platform == "win32":
-        username = os.getlogin()
-        # Remove "Read Data/List Directory" permission for current user, but
-        # leave everything else.
-        args = ["icacls", path, "/deny", username + ":(RD)"]
-        subprocess.check_call(args)
+from pathlib import Path
+from typing import Iterator, List, Set, Union
 
 
 def get_filelist(base: str) -> Set[str]:
@@ -44,3 +19,14 @@ def get_filelist(base: str) -> Set[str]:
         )
 
     return set(chain.from_iterable(join(*dirinfo) for dirinfo in os.walk(base)))
+
+
+@contextmanager
+def chmod(path: Union[str, Path], mode: int) -> Iterator[None]:
+    """Contextmanager to temporarily update a path's mode."""
+    old_mode = os.stat(path).st_mode
+    try:
+        os.chmod(path, mode)
+        yield
+    finally:
+        os.chmod(path, old_mode)
